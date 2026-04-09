@@ -1,0 +1,18 @@
+# Optional local PostgreSQL for `npm run dev` / Prisma.
+# Usage: docker compose up -d
+# Then: DATABASE_URL=postgresql://postgres:postgres@localhost:5432/variantimg npx prisma migrate dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: variantimg
+    volumes:
+      - variantimg_pgdata:/var/lib/postgresql/data
+
+volumes:
+  variantimg_pgdata:

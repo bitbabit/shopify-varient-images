@@ -1,0 +1,257 @@
+{% comment %}
+  Pre-serialize variant image metafields for JS. Hero + horizontal thumbnail strip.
+{% endcomment %}
+
+<style>
+  .variant-img-gallery {
+    width: 100%;
+    max-width: 100%;
+  }
+  .variant-img-gallery__main {
+    width: 100%;
+    background: rgb(var(--color-background, 255 255 255));
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .variant-img-gallery__hero {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    object-fit: contain;
+    vertical-align: middle;
+  }
+  .variant-img-gallery__thumbs {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 12px 4px 16px;
+    margin: 0;
+    list-style: none;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scroll-snap-type: x mandatory;
+  }
+  .variant-img-gallery__thumb {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    padding: 0;
+    margin: 0;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+    line-height: 0;
+    transition: border-color 0.15s ease;
+  }
+  .variant-img-gallery__thumb[aria-current="true"] {
+    border-color: currentColor;
+  }
+  .variant-img-gallery__thumb img {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  window.variantImages = window.variantImages || {};
+  window.variantImages["{{ block.id }}"] = {
+    selectors: {{ block.settings.gallery_selector | json }},
+    byVariantId: {
+      {%- for variant in product.variants -%}
+        "{{ variant.id }}": [
+          {%- assign vimgs = variant.metafields.custom.variant_images.value -%}
+          {%- if vimgs -%}
+            {%- for image in vimgs -%}
+              {
+                "src": {{ image | image_url: width: 1400 | json }},
+                "thumb": {{ image | image_url: width: 200 | json }},
+                "alt": {{ image.alt | default: product.title | json }}
+              }{%- unless forloop.last -%},{%- endunless -%}
+            {%- endfor -%}
+          {%- endif -%}
+        ]{% unless forloop.last %},{% endunless %}
+      {%- endfor -%}
+    },
+    defaultHtml: null,
+    galleryEl: null
+  };
+
+  (function () {
+    var cfg = window.variantImages["{{ block.id }}"];
+    if (!cfg) return;
+
+    function parseSelectors(raw) {
+      if (!raw || typeof raw !== "string") return [".product__media-wrapper", ".product__media-list"];
+      return raw
+        .split(",")
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean);
+    }
+
+    function findGallery() {
+      var candidates = parseSelectors(cfg.selectors);
+      for (var i = 0; i < candidates.length; i++) {
+        var el = document.querySelector(candidates[i]);
+        if (el) return el;
+      }
+      return null;
+    }
+
+    function escAttr(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;");
+    }
+
+    function buildGalleryHtml(images) {
+      if (!images || !images.length) return "";
+      var first = images[0];
+      var mainSrc = escAttr(first.src);
+      var mainAlt = escAttr(first.alt);
+      var parts = [];
+      parts.push('<div class="variant-img-gallery" data-variant-img-gallery>');
+      parts.push('<div class="variant-img-gallery__main">');
+      parts.push(
+        '<img class="variant-img-gallery__hero" src="' +
+          mainSrc +
+          '" alt="' +
+          mainAlt +
+          '" width="1400" loading="eager" sizes="(min-width: 990px) 60vw, 100vw" />'
+      );
+      parts.push("</div>");
+      parts.push('<div class="variant-img-gallery__thumbs" role="list">');
+      for (var i = 0; i < images.length; i++) {
+        var img = images[i];
+        var thumbSrc = escAttr(img.thumb || img.src);
+        var fullSrc = escAttr(img.src);
+        var alt = escAttr(img.alt);
+        var current = i === 0 ? "true" : "false";
+        parts.push(
+          '<button type="button" class="variant-img-gallery__thumb" role="listitem" data-full-src="' +
+            fullSrc +
+            '" data-full-alt="' +
+            alt +
+            '" aria-label="' +
+            alt +
+            '" aria-current="' +
+            current +
+            '">'
+        );
+        parts.push(
+          '<img src="' +
+            thumbSrc +
+            '" alt="" width="72" height="72" loading="' +
+            (i < 6 ? "eager" : "lazy") +
+            '" />'
+        );
+        parts.push("</button>");
+      }
+      parts.push("</div></div>");
+      return parts.join("");
+    }
+
+    function bindThumbStrip(container) {
+      if (!container || container._variantImgThumbBound) return;
+      container._variantImgThumbBound = true;
+      container.addEventListener("click", function (ev) {
+        var btn = ev.target.closest(".variant-img-gallery__thumb");
+        if (!btn || !container.contains(btn)) return;
+        var hero = container.querySelector(".variant-img-gallery__hero");
+        if (!hero) return;
+        var full = btn.getAttribute("data-full-src");
+        var fullAlt = btn.getAttribute("data-full-alt");
+        if (full) hero.setAttribute("src", full);
+        if (fullAlt != null) hero.setAttribute("alt", fullAlt);
+        container.querySelectorAll(".variant-img-gallery__thumb").forEach(function (t) {
+          t.setAttribute("aria-current", t === btn ? "true" : "false");
+        });
+      });
+    }
+
+    function getVariantIdFromEvent(ev) {
+      if (!ev || !ev.detail) return null;
+      var d = ev.detail;
+      if (d.variant && d.variant.id != null) return String(d.variant.id);
+      if (d.variantId != null) return String(d.variantId);
+      return null;
+    }
+
+    function applyVariant(variantIdStr) {
+      var el = cfg.galleryEl || findGallery();
+      if (!el) return;
+      cfg.galleryEl = el;
+      if (cfg.defaultHtml === null) {
+        cfg.defaultHtml = el.innerHTML;
+      }
+      var list = cfg.byVariantId[variantIdStr];
+      if (list && list.length) {
+        el.innerHTML = buildGalleryHtml(list);
+        bindThumbStrip(el);
+      } else {
+        el.innerHTML = cfg.defaultHtml;
+      }
+    }
+
+    function onVariantChange(ev) {
+      var id = getVariantIdFromEvent(ev);
+      if (id) applyVariant(id);
+    }
+
+    function onSelectChange(ev) {
+      var t = ev.target;
+      if (!t || t.name !== "id") return;
+      applyVariant(String(t.value));
+    }
+
+    document.addEventListener("variant:changed", onVariantChange);
+    document.addEventListener("change", onSelectChange);
+
+    var initialVariantId = {{ product.selected_or_first_available_variant.id | json }};
+
+    function boot() {
+      cfg.galleryEl = findGallery();
+      if (cfg.galleryEl && cfg.defaultHtml === null) {
+        cfg.defaultHtml = cfg.galleryEl.innerHTML;
+      }
+      if (initialVariantId != null) {
+        applyVariant(String(initialVariantId));
+      }
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", boot);
+    } else {
+      boot();
+    }
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Variant image gallery",
+  "target": "section",
+  "templates": ["product"],
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Large image on top, small images in a horizontal scroll row. Uses custom.variant_images per variant. Set the selector to your theme’s product gallery container."
+    },
+    {
+      "type": "text",
+      "id": "gallery_selector",
+      "label": "Gallery container CSS selector",
+      "default": ".product__media-wrapper, .product__media-list, [data-product-media-container]",
+      "info": "Comma-separated. The first matching element’s inner HTML is replaced."
+    }
+  ]
+}
+{% endschema %}
