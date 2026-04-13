@@ -63,6 +63,7 @@ If you removed the DB entirely, you’d need another session strategy (e.g. diff
    | `SHOPIFY_APP_URL` | `https://YOUR-SERVICE.onrender.com` *(after first deploy, set exact URL — no trailing slash)* |
    | `SCOPES` | `read_products,write_products,read_files,write_files` |
    | `NODE_ENV` | `production` |
+   | `PRO_SHOPS` | *(optional)* If the app is a **custom** app, Shopify blocks in-app billing. Set to a comma-separated list of `*.myshopify.com` shops that should get Pro (e.g. `nextcareindia.myshopify.com`). Public App Store apps can omit this and use **Subscribe to Pro** instead. |
 
 5. **Create Web Service**. After deploy, Render shows a URL like `https://variant-images.onrender.com`.  
    - If you guessed the URL wrong, **edit** `SHOPIFY_APP_URL` to match exactly and **redeploy** or **Manual Deploy**.

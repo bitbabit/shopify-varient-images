@@ -29,6 +29,7 @@ import {
 } from "../lib/variant-images.server";
 import { PRO_PLAN } from "../shopify.server";
 import { billingIsTest } from "../lib/billing-env.server";
+import { resolveIsPro } from "../lib/billing-entitlement.server";
 import {
   FREE_MAX_IMAGES_PER_VARIANT,
   FREE_MAX_PRODUCTS_WITH_IMAGES,
@@ -56,6 +57,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     plans: [PRO_PLAN],
     isTest: billingIsTest(),
   });
+  const isPro = resolveIsPro(session.shop, hasActivePayment);
   const configuredProductIds = await getShopUsage(session.shop);
   const url = new URL(request.url);
   // Admin links often pass numeric `id`; GraphQL needs a Product GID.
@@ -70,7 +72,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product: null,
       productId: null,
       error: null,
-      isPro: hasActivePayment,
+      isPro,
       configuredProductCount: configuredProductIds.length,
       freeMaxImagesPerVariant: FREE_MAX_IMAGES_PER_VARIANT,
       freeMaxProducts: FREE_MAX_PRODUCTS_WITH_IMAGES,
@@ -86,7 +88,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product,
       productId,
       error: product ? null : "Product not found.",
-      isPro: hasActivePayment,
+      isPro,
       configuredProductCount: configuredProductIds.length,
       freeMaxImagesPerVariant: FREE_MAX_IMAGES_PER_VARIANT,
       freeMaxProducts: FREE_MAX_PRODUCTS_WITH_IMAGES,
@@ -98,7 +100,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product: null,
       productId,
       error: message,
-      isPro: hasActivePayment,
+      isPro,
       configuredProductCount: configuredProductIds.length,
       freeMaxImagesPerVariant: FREE_MAX_IMAGES_PER_VARIANT,
       freeMaxProducts: FREE_MAX_PRODUCTS_WITH_IMAGES,
@@ -121,12 +123,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const graphql = admin.graphql as unknown as AdminGraphql;
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
-  const isPro = (
-    await billing.check({
-      plans: [PRO_PLAN],
-      isTest: billingIsTest(),
-    })
-  ).hasActivePayment;
+  const isPro = resolveIsPro(
+    session.shop,
+    (
+      await billing.check({
+        plans: [PRO_PLAN],
+        isTest: billingIsTest(),
+      })
+    ).hasActivePayment,
+  );
 
   if (intent === "listFiles") {
     const query = String(formData.get("query") ?? "");

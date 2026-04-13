@@ -16,7 +16,7 @@ Limits are defined in [`app/lib/plans.ts`](../app/lib/plans.ts) and enforced ser
 | Variant image file references | Shopify variant metafield `custom.variant_images` |
 | OAuth sessions | Your database (`Session` via Prisma) |
 | Free-tier product slot counts | Your database (`ShopUsage.configuredProductIds`) |
-| Subscription state | Shopify (Billing API); checked with `billing.check` |
+| Subscription state | Shopify (Billing API); checked with `billing.check`. **Custom/private apps** cannot use the Billing API — use optional `PRO_SHOPS` (see [`app/lib/billing-entitlement.server.ts`](../app/lib/billing-entitlement.server.ts)). |
 
 ## Storefront (theme extension)
 
@@ -37,3 +37,9 @@ Your public privacy policy should mention:
 ## Test billing
 
 Set `SHOPIFY_BILLING_TEST=true` in development when using [test charges](https://shopify.dev/docs/apps/billing) on development stores. Leave unset in production.
+
+## Custom apps (no Billing API)
+
+Shopify returns *Custom apps cannot use the Billing API* when calling `billing.request`. That applies to admin-created or non–App Store installs. **In-app Subscribe** will not work until the app is a public App Store listing (or a distribution type that supports billing).
+
+For those deployments, set **`PRO_SHOPS`** to a comma-separated list of `*.myshopify.com` hostnames. Those shops are treated as Pro without a Shopify subscription record. Document this in your merchant agreement if you charge outside Shopify.

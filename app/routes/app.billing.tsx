@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useActionData } from "react-router";
 import { authenticate, PRO_PLAN } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
@@ -12,31 +12,61 @@ import {
   PRO_PLAN_DISPLAY,
 } from "../lib/plans";
 import { billingIsTest } from "../lib/billing-env.server";
+import {
+  resolveIsPro,
+  shopHasEnvProEntitlement,
+  formatBillingRequestError,
+} from "../lib/billing-entitlement.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const { hasActivePayment, appSubscriptions } = await billing.check({
     plans: [PRO_PLAN],
     isTest: billingIsTest(),
   });
+  const hasPro = resolveIsPro(session.shop, hasActivePayment);
   return {
-    hasPro: hasActivePayment,
+    hasPro,
+    proViaEnv: shopHasEnvProEntitlement(session.shop),
     subscriptions: appSubscriptions ?? [],
     isTest: billingIsTest(),
   };
 };
 
 export default function BillingPage() {
-  const { hasPro, subscriptions, isTest } = useLoaderData<typeof loader>();
+  const { hasPro, proViaEnv, subscriptions, isTest } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const actionData = useActionData<typeof action>();
+  const subscribeError =
+    actionData && "subscribeError" in actionData
+      ? actionData.subscribeError
+      : undefined;
 
   return (
     <s-page heading="Plan & billing">
+      {subscribeError ? (
+        <s-banner tone="critical" heading="Could not start subscription">
+          {subscribeError}
+        </s-banner>
+      ) : null}
       <s-section heading={hasPro ? "Pro active" : "Upgrade to Pro"}>
         {hasPro ? (
           <s-paragraph>
-            You have an active Pro subscription. Variant images are unlimited, and you can use
-            &quot;Copy to another product&quot; from the home screen.
+            {proViaEnv ? (
+              <>
+                Pro is enabled for this shop via server configuration (
+                <s-text type="strong">PRO_SHOPS</s-text>). Variant images are
+                unlimited, and you can use &quot;Copy to another product&quot;
+                from the home screen.
+              </>
+            ) : (
+              <>
+                You have an active Pro subscription. Variant images are
+                unlimited, and you can use &quot;Copy to another product&quot;
+                from the home screen.
+              </>
+            )}
           </s-paragraph>
         ) : (
           <>
@@ -86,18 +116,29 @@ export default function BillingPage() {
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const formData = await request.formData();
   if (String(formData.get("intent")) !== "subscribe") {
     return new Response(null, { status: 400 });
   }
+  const { hasActivePayment } = await billing.check({
+    plans: [PRO_PLAN],
+    isTest: billingIsTest(),
+  });
+  if (resolveIsPro(session.shop, hasActivePayment)) {
+    return { subscribeError: null as string | null };
+  }
   const url = new URL(request.url);
   const returnUrl = `${url.origin}/app/billing`;
-  return billing.request({
-    plan: PRO_PLAN,
-    isTest: billingIsTest(),
-    returnUrl,
-  });
+  try {
+    return await billing.request({
+      plan: PRO_PLAN,
+      isTest: billingIsTest(),
+      returnUrl,
+    });
+  } catch (e: unknown) {
+    return { subscribeError: formatBillingRequestError(e) };
+  }
 };
 
 export const headers: HeadersFunction = (args) => boundary.headers(args);
