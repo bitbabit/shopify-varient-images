@@ -2,7 +2,7 @@
 
 client_id = "a945c8b5a8d59b06fe8203e4bff9bb79"
 name = "BitBabit:Variant Images"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://shopify-varient-images.onrender.com"
 embedded = true
 
 [build]
@@ -30,4 +30,7 @@ api_version = "2026-07"
 scopes = "read_products,write_products,read_files,write_files"
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [
+  "https://shopify-varient-images.onrender.com/auth/callback",
+  "https://shopify-varient-images.onrender.com/auth/session-token"
+]

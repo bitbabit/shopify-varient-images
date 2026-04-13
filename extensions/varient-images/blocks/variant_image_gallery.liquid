@@ -1,8 +1,16 @@
 {% comment %}
-  Pre-serialize variant image metafields for JS. Hero + horizontal thumbnail strip.
+  Self-contained variant gallery: no theme CSS selectors required.
+  Add the block on the product template and assign images in the app.
 {% endcomment %}
 
+{% assign first_variant = product.selected_or_first_available_variant %}
+
 <style>
+  .variant-img-app-block {
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 1rem;
+  }
   .variant-img-gallery {
     width: 100%;
     max-width: 100%;
@@ -58,12 +66,66 @@
     display: block;
     pointer-events: none;
   }
+  .variant-img-gallery--empty {
+    padding: 12px;
+    font-size: 0.9rem;
+    color: rgba(var(--color-foreground, 18 18 18), 0.65);
+    border: 1px dashed rgba(var(--color-foreground, 18 18 18), 0.2);
+    border-radius: 8px;
+    text-align: center;
+  }
 </style>
+
+<div class="variant-img-app-block" data-variant-img-block="{{ block.id }}">
+  <div id="variant-img-root-{{ block.id }}">
+    {% assign vimgs = first_variant.metafields.custom.variant_images.value %}
+    {% if vimgs and vimgs.size > 0 %}
+      <div class="variant-img-gallery" data-variant-img-gallery>
+        <div class="variant-img-gallery__main">
+          {% assign first_img = vimgs | first %}
+          <img
+            class="variant-img-gallery__hero"
+            src="{{ first_img | image_url: width: 1400 }}"
+            alt="{{ first_img.alt | default: product.title | escape }}"
+            width="1400"
+            loading="eager"
+            sizes="(min-width: 990px) 60vw, 100vw"
+          >
+        </div>
+        <div class="variant-img-gallery__thumbs" role="list">
+          {% for image in vimgs %}
+            <button
+              type="button"
+              class="variant-img-gallery__thumb"
+              role="listitem"
+              data-full-src="{{ image | image_url: width: 1400 }}"
+              data-full-alt="{{ image.alt | default: product.title | escape }}"
+              aria-label="{{ image.alt | default: product.title | escape }}"
+              aria-current="{% if forloop.first %}true{% else %}false{% endif %}"
+            >
+              <img
+                src="{{ image | image_url: width: 200 }}"
+                alt=""
+                width="72"
+                height="72"
+                loading="{% if forloop.index <= 6 %}eager{% else %}lazy{% endif %}"
+              >
+            </button>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="variant-img-gallery--empty" data-variant-empty>
+        {{ block.settings.empty_message }}
+      </div>
+    {% endif %}
+  </div>
+</div>
 
 <script>
   window.variantImages = window.variantImages || {};
   window.variantImages["{{ block.id }}"] = {
-    selectors: {{ block.settings.gallery_selector | json }},
+    rootId: "variant-img-root-{{ block.id }}",
     byVariantId: {
       {%- for variant in product.variants -%}
         "{{ variant.id }}": [
@@ -80,30 +142,12 @@
         ]{% unless forloop.last %},{% endunless %}
       {%- endfor -%}
     },
-    defaultHtml: null,
-    galleryEl: null
+    emptyMessage: {{ block.settings.empty_message | json }}
   };
 
   (function () {
     var cfg = window.variantImages["{{ block.id }}"];
     if (!cfg) return;
-
-    function parseSelectors(raw) {
-      if (!raw || typeof raw !== "string") return [".product__media-wrapper", ".product__media-list"];
-      return raw
-        .split(",")
-        .map(function (s) { return s.trim(); })
-        .filter(Boolean);
-    }
-
-    function findGallery() {
-      var candidates = parseSelectors(cfg.selectors);
-      for (var i = 0; i < candidates.length; i++) {
-        var el = document.querySelector(candidates[i]);
-        if (el) return el;
-      }
-      return null;
-    }
 
     function escAttr(s) {
       return String(s == null ? "" : s)
@@ -159,19 +203,20 @@
       return parts.join("");
     }
 
-    function bindThumbStrip(container) {
-      if (!container || container._variantImgThumbBound) return;
-      container._variantImgThumbBound = true;
-      container.addEventListener("click", function (ev) {
+    function bindThumbStrip(root) {
+      var gallery = root.querySelector("[data-variant-img-gallery]");
+      if (!gallery || gallery._variantImgThumbBound) return;
+      gallery._variantImgThumbBound = true;
+      gallery.addEventListener("click", function (ev) {
         var btn = ev.target.closest(".variant-img-gallery__thumb");
-        if (!btn || !container.contains(btn)) return;
-        var hero = container.querySelector(".variant-img-gallery__hero");
+        if (!btn || !gallery.contains(btn)) return;
+        var hero = gallery.querySelector(".variant-img-gallery__hero");
         if (!hero) return;
         var full = btn.getAttribute("data-full-src");
         var fullAlt = btn.getAttribute("data-full-alt");
         if (full) hero.setAttribute("src", full);
         if (fullAlt != null) hero.setAttribute("alt", fullAlt);
-        container.querySelectorAll(".variant-img-gallery__thumb").forEach(function (t) {
+        gallery.querySelectorAll(".variant-img-gallery__thumb").forEach(function (t) {
           t.setAttribute("aria-current", t === btn ? "true" : "false");
         });
       });
@@ -185,19 +230,23 @@
       return null;
     }
 
+    function parseVariantFromUrl() {
+      var m = /(?:\?|&)variant=(\d+)/.exec(window.location.search);
+      return m ? m[1] : null;
+    }
+
     function applyVariant(variantIdStr) {
-      var el = cfg.galleryEl || findGallery();
-      if (!el) return;
-      cfg.galleryEl = el;
-      if (cfg.defaultHtml === null) {
-        cfg.defaultHtml = el.innerHTML;
-      }
+      var root = document.getElementById(cfg.rootId);
+      if (!root) return;
       var list = cfg.byVariantId[variantIdStr];
       if (list && list.length) {
-        el.innerHTML = buildGalleryHtml(list);
-        bindThumbStrip(el);
+        root.innerHTML = buildGalleryHtml(list);
+        bindThumbStrip(root);
       } else {
-        el.innerHTML = cfg.defaultHtml;
+        root.innerHTML =
+          '<div class="variant-img-gallery--empty" data-variant-empty>' +
+          escAttr(cfg.emptyMessage) +
+          "</div>";
       }
     }
 
@@ -208,22 +257,22 @@
 
     function onSelectChange(ev) {
       var t = ev.target;
-      if (!t || t.name !== "id") return;
-      applyVariant(String(t.value));
+      if (!t) return;
+      if (t.name === "id" || t.getAttribute("name") === "id") {
+        applyVariant(String(t.value));
+      }
     }
 
     document.addEventListener("variant:changed", onVariantChange);
     document.addEventListener("change", onSelectChange);
 
-    var initialVariantId = {{ product.selected_or_first_available_variant.id | json }};
-
     function boot() {
-      cfg.galleryEl = findGallery();
-      if (cfg.galleryEl && cfg.defaultHtml === null) {
-        cfg.defaultHtml = cfg.galleryEl.innerHTML;
-      }
-      if (initialVariantId != null) {
-        applyVariant(String(initialVariantId));
+      var root = document.getElementById(cfg.rootId);
+      if (!root) return;
+      bindThumbStrip(root);
+      var urlVariant = parseVariantFromUrl();
+      if (urlVariant != null && cfg.byVariantId[urlVariant] !== undefined) {
+        applyVariant(String(urlVariant));
       }
     }
 
@@ -232,6 +281,13 @@
     } else {
       boot();
     }
+
+    document.addEventListener("shopify:section:load", function (ev) {
+      var root = document.getElementById(cfg.rootId);
+      if (ev && root && ev.target && ev.target.contains(root)) {
+        boot();
+      }
+    });
   })();
 </script>
 
@@ -243,14 +299,13 @@
   "settings": [
     {
       "type": "paragraph",
-      "content": "Large image on top, small images in a horizontal scroll row. Uses custom.variant_images per variant. Set the selector to your theme’s product gallery container."
+      "content": "Shows custom variant images from metafield custom.variant_images. Add this block to the product template — no CSS selectors needed. Tip: use the theme editor to place it where the gallery should appear; you can hide the theme’s default product media if you only want these images."
     },
     {
       "type": "text",
-      "id": "gallery_selector",
-      "label": "Gallery container CSS selector",
-      "default": ".product__media-wrapper, .product__media-list, [data-product-media-container]",
-      "info": "Comma-separated. The first matching element’s inner HTML is replaced."
+      "id": "empty_message",
+      "label": "Message when a variant has no custom images",
+      "default": "No extra images for this variant. Assign images in the app."
     }
   ]
 }

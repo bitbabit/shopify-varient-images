@@ -4,7 +4,12 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher, useLoaderData, useSearchParams } from "react-router";
+import {
+  useFetcher,
+  useLoaderData,
+  useRevalidator,
+  useSearchParams,
+} from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -17,20 +22,41 @@ import {
   uploadAndCreateFile,
   fetchFilePreviews,
   listShopifyImageFiles,
+  duplicateVariantImagesBetweenProducts,
   type AdminGraphql,
   type ProductPayload,
   type ShopifyFileRow,
 } from "../lib/variant-images.server";
+import { PRO_PLAN } from "../shopify.server";
+import { billingIsTest } from "../lib/billing-env.server";
+import {
+  FREE_MAX_IMAGES_PER_VARIANT,
+  FREE_MAX_PRODUCTS_WITH_IMAGES,
+} from "../lib/plans";
+import {
+  assertFreeTierSaveAllowed,
+  getShopUsage,
+  syncShopUsageAfterSave,
+} from "../lib/shop-usage.server";
 
 type LoaderData = {
   shop: string;
   product: ProductPayload | null;
   productId: string | null;
   error?: string | null;
+  isPro: boolean;
+  configuredProductCount: number;
+  freeMaxImagesPerVariant: number;
+  freeMaxProducts: number;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+  const { hasActivePayment } = await billing.check({
+    plans: [PRO_PLAN],
+    isTest: billingIsTest(),
+  });
+  const configuredProductIds = await getShopUsage(session.shop);
   const url = new URL(request.url);
   // Admin links often pass numeric `id`; GraphQL needs a Product GID.
   const rawProductId =
@@ -44,6 +70,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product: null,
       productId: null,
       error: null,
+      isPro: hasActivePayment,
+      configuredProductCount: configuredProductIds.length,
+      freeMaxImagesPerVariant: FREE_MAX_IMAGES_PER_VARIANT,
+      freeMaxProducts: FREE_MAX_PRODUCTS_WITH_IMAGES,
     } satisfies LoaderData;
   }
   try {
@@ -56,6 +86,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product,
       productId,
       error: product ? null : "Product not found.",
+      isPro: hasActivePayment,
+      configuredProductCount: configuredProductIds.length,
+      freeMaxImagesPerVariant: FREE_MAX_IMAGES_PER_VARIANT,
+      freeMaxProducts: FREE_MAX_PRODUCTS_WITH_IMAGES,
     } satisfies LoaderData;
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load product.";
@@ -64,6 +98,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product: null,
       productId,
       error: message,
+      isPro: hasActivePayment,
+      configuredProductCount: configuredProductIds.length,
+      freeMaxImagesPerVariant: FREE_MAX_IMAGES_PER_VARIANT,
+      freeMaxProducts: FREE_MAX_PRODUCTS_WITH_IMAGES,
     } satisfies LoaderData;
   }
 };
@@ -79,16 +117,20 @@ export type ActionData =
   | { ok: false; message: string };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+  const graphql = admin.graphql as unknown as AdminGraphql;
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+  const isPro = (
+    await billing.check({
+      plans: [PRO_PLAN],
+      isTest: billingIsTest(),
+    })
+  ).hasActivePayment;
 
   if (intent === "listFiles") {
     const query = String(formData.get("query") ?? "");
-    return await listShopifyImageFiles(
-      admin.graphql as unknown as AdminGraphql,
-      query,
-    );
+    return await listShopifyImageFiles(graphql, query);
   }
 
   if (intent === "resolvePreviews") {
@@ -101,23 +143,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch {
       return { ok: false as const, message: "Invalid image ids." };
     }
-    const previews = await fetchFilePreviews(
-      admin.graphql as unknown as AdminGraphql,
-      gids,
-    );
+    const previews = await fetchFilePreviews(graphql, gids);
     return { ok: true as const, previews };
   }
 
   if (intent === "upload") {
     const file = formData.get("file");
     const forVariant = String(formData.get("forVariant") ?? "");
+    const productGid = String(formData.get("productId") ?? "");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false as const, message: "Choose an image file to upload." };
     }
-    const result = await uploadAndCreateFile(
-      admin.graphql as unknown as AdminGraphql,
-      file,
-    );
+    if (!isPro && productGid && forVariant) {
+      const pid = normalizeShopifyProductGid(productGid);
+      const loaded = await loadProductForVariantImages(graphql, pid);
+      const v = loaded?.variants.find((x) => x.id === forVariant);
+      if (v && v.fileGids.length >= FREE_MAX_IMAGES_PER_VARIANT) {
+        return {
+          ok: false as const,
+          message: `Free plan allows up to ${FREE_MAX_IMAGES_PER_VARIANT} images per variant. Upgrade to Pro for unlimited.`,
+        };
+      }
+    }
+    const result = await uploadAndCreateFile(graphql, file);
     if (!result.ok) {
       return { ok: false as const, message: result.message };
     }
@@ -126,6 +174,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "save") {
     const variantId = String(formData.get("variantId") ?? "");
+    const productGidRaw = String(formData.get("productId") ?? "");
     const fileGidsRaw = String(formData.get("fileGids") ?? "[]");
     let fileGids: string[] = [];
     try {
@@ -135,28 +184,82 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch {
       return { ok: false as const, message: "Invalid file list." };
     }
-    if (!variantId) {
-      return { ok: false as const, message: "Missing variant." };
+    if (!variantId || !productGidRaw) {
+      return { ok: false as const, message: "Missing variant or product." };
     }
-    return await saveVariantImagesMetafield(
-      admin.graphql as unknown as AdminGraphql,
+    const productGid = normalizeShopifyProductGid(productGidRaw);
+    if (!isPro) {
+      const configured = await getShopUsage(session.shop);
+      const gate = assertFreeTierSaveAllowed({
+        productGid,
+        fileGidsForThisVariant: fileGids,
+        configuredProductIds: configured,
+      });
+      if (!gate.ok) return gate;
+    }
+    const result = await saveVariantImagesMetafield(
+      graphql,
       variantId,
       fileGids,
     );
+    if (!result.ok) return result;
+    const fresh = await loadProductForVariantImages(graphql, productGid);
+    if (fresh) {
+      await syncShopUsageAfterSave({
+        shop: session.shop,
+        productGid,
+        variantFileGids: fresh.variants.map((v) => ({
+          variantId: v.id,
+          fileGids: v.fileGids,
+        })),
+      });
+    }
+    return { ok: true as const };
+  }
+
+  if (intent === "duplicate") {
+    if (!isPro) {
+      return {
+        ok: false as const,
+        message:
+          "Copying variant images to another product is a Pro feature. Upgrade from Plan & billing.",
+      };
+    }
+    const sourceRaw = String(formData.get("sourceProductId") ?? "");
+    const targetRaw = String(formData.get("targetProductId") ?? "");
+    if (!sourceRaw || !targetRaw) {
+      return { ok: false as const, message: "Select a target product." };
+    }
+    const source = normalizeShopifyProductGid(sourceRaw);
+    const target = normalizeShopifyProductGid(targetRaw);
+    if (source === target) {
+      return { ok: false as const, message: "Choose a different target product." };
+    }
+    return await duplicateVariantImagesBetweenProducts(graphql, source, target);
   }
 
   return { ok: false as const, message: "Unknown action." };
 };
 
 export default function VariantImagesPage() {
-  const { shop, product, productId, error: loadError } =
-    useLoaderData<typeof loader>();
+  const {
+    shop,
+    product,
+    productId,
+    error: loadError,
+    isPro,
+    configuredProductCount,
+    freeMaxImagesPerVariant,
+    freeMaxProducts,
+  } = useLoaderData<typeof loader>();
   const shopify = useAppBridge();
   const [, setSearchParams] = useSearchParams();
   const saveFetcher = useFetcher<ActionData>();
   const uploadFetcher = useFetcher<ActionData>();
   const previewFetcher = useFetcher<ActionData>();
   const filesFetcher = useFetcher<ActionData>();
+  const duplicateFetcher = useFetcher<ActionData>();
+  const revalidator = useRevalidator();
 
   const [variantFiles, setVariantFiles] = useState<Record<string, string[]>>({});
   const [fileBrowseVariantId, setFileBrowseVariantId] = useState<string | null>(
@@ -217,6 +320,10 @@ export default function VariantImagesPage() {
     [previewFetcher, previewLookup],
   );
 
+  /** Keeps upload success effect from re-firing when `requestPreviews` identity changes (e.g. after preview resolve). */
+  const requestPreviewsRef = useRef(requestPreviews);
+  requestPreviewsRef.current = requestPreviews;
+
   useEffect(() => {
     const d = previewFetcher.data;
     if (!d || previewFetcher.state !== "idle" || !d.ok) return;
@@ -235,11 +342,11 @@ export default function VariantImagesPage() {
         [vid]: [...(prev[vid] ?? []), d.id!],
       }));
       shopify.toast.show("Image uploaded to Shopify Files");
-      requestPreviews([d.id!]);
+      requestPreviewsRef.current([d.id!]);
     } else if (!d.ok) {
       shopify.toast.show(d.message, { isError: true });
     }
-  }, [uploadFetcher.data, uploadFetcher.state, shopify, requestPreviews]);
+  }, [uploadFetcher.data, uploadFetcher.state, shopify]);
 
   useEffect(() => {
     const d = saveFetcher.data;
@@ -259,6 +366,17 @@ export default function VariantImagesPage() {
       shopify.toast.show(d.message, { isError: true });
     }
   }, [filesFetcher.data, filesFetcher.state, shopify]);
+
+  useEffect(() => {
+    const d = duplicateFetcher.data;
+    if (!d || duplicateFetcher.state !== "idle") return;
+    if (d.ok) {
+      shopify.toast.show("Variant images copied to the target product.");
+      revalidator.revalidate();
+    } else {
+      shopify.toast.show(d.message, { isError: true });
+    }
+  }, [duplicateFetcher.data, duplicateFetcher.state, shopify, revalidator]);
 
   const themeEditorUrl = useMemo(
     () => `https://${shop}/admin/themes/current/editor?template=product`,
@@ -287,6 +405,37 @@ export default function VariantImagesPage() {
       );
     }
   }, [shopify, setSearchParams]);
+
+  const duplicateToProduct = useCallback(async () => {
+    if (!product?.id) return;
+    try {
+      const result = await shopify.resourcePicker({
+        type: "product",
+        action: "select",
+        multiple: false,
+      });
+      const row = Array.isArray(result) ? result[0] : null;
+      const id =
+        row && typeof row === "object" && "id" in row
+          ? String((row as { id: string }).id)
+          : null;
+      if (id) {
+        duplicateFetcher.submit(
+          {
+            intent: "duplicate",
+            sourceProductId: product.id,
+            targetProductId: id,
+          },
+          { method: "post" },
+        );
+      }
+    } catch (e) {
+      shopify.toast.show(
+        e instanceof Error ? e.message : "Product selection cancelled",
+        { isError: true },
+      );
+    }
+  }, [shopify, product?.id, duplicateFetcher]);
 
   const filesList = useMemo((): ShopifyFileRow[] => {
     const d = filesFetcher.data;
@@ -353,18 +502,20 @@ export default function VariantImagesPage() {
 
   const saveVariant = useCallback(
     (variantId: string) => {
+      if (!product?.id) return;
       setPendingSaveVariantId(variantId);
       const fileGids = variantFiles[variantId] ?? [];
       saveFetcher.submit(
         {
           intent: "save",
           variantId,
+          productId: product.id,
           fileGids: JSON.stringify(fileGids),
         },
         { method: "post" },
       );
     },
-    [saveFetcher, variantFiles],
+    [saveFetcher, variantFiles, product?.id],
   );
 
   const triggerUpload = useCallback((variantId: string) => {
@@ -382,9 +533,10 @@ export default function VariantImagesPage() {
       fd.set("intent", "upload");
       fd.set("file", file);
       fd.set("forVariant", variantId);
+      if (product?.id) fd.set("productId", product.id);
       uploadFetcher.submit(fd, { method: "post", encType: "multipart/form-data" });
     },
-    [uploadFetcher],
+    [uploadFetcher, product?.id],
   );
 
   const saving =
@@ -395,6 +547,9 @@ export default function VariantImagesPage() {
     previewFetcher.state === "submitting" || previewFetcher.state === "loading";
   const filesLoading =
     filesFetcher.state === "submitting" || filesFetcher.state === "loading";
+  const duplicating =
+    duplicateFetcher.state === "submitting" ||
+    duplicateFetcher.state === "loading";
 
   return (
     <s-page heading="Variant images">
@@ -405,6 +560,25 @@ export default function VariantImagesPage() {
         style={{ display: "none" }}
         onChange={onHiddenFileChange}
       />
+
+      {!isPro ? (
+        <s-banner tone="info" heading="Free plan limits">
+          <s-paragraph>
+            Up to {freeMaxImagesPerVariant} images per variant and{" "}
+            {freeMaxProducts} products with variant images ({configuredProductCount} /{" "}
+            {freeMaxProducts} products in use).{" "}
+            <s-link href="/app/billing">Upgrade to Pro</s-link> for unlimited images,
+            unlimited products, and copy-to-product.
+          </s-paragraph>
+        </s-banner>
+      ) : (
+        <s-banner tone="success" heading="Pro">
+          <s-paragraph>
+            Unlimited images and products. Use &quot;Copy to another product&quot; below
+            to duplicate mappings.
+          </s-paragraph>
+        </s-banner>
+      )}
 
       <s-section heading="Product">
         <s-paragraph>
@@ -479,6 +653,24 @@ export default function VariantImagesPage() {
           </div>
         ) : null}
       </s-section>
+
+      {product && product.variants.length > 0 ? (
+        <s-section heading="Pro: Copy to another product">
+          <s-paragraph>
+            Copy all variant image lists from this product to another product that has the
+            same number of variants (matched in order).
+          </s-paragraph>
+          {isPro ? (
+            <s-button onClick={duplicateToProduct} loading={duplicating}>
+              Choose target product…
+            </s-button>
+          ) : (
+            <s-paragraph>
+              <s-link href="/app/billing">Subscribe to Pro</s-link> to enable this.
+            </s-paragraph>
+          )}
+        </s-section>
+      ) : null}
 
       {loadError ? (
         <s-banner tone="critical" heading="Could not load product">

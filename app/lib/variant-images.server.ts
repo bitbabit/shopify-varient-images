@@ -543,3 +543,30 @@ export async function uploadAndCreateFile(
   }
   return { ok: true, id };
 }
+
+/** Copy variant image lists from source product to target (variants matched by order). Pro feature. */
+export async function duplicateVariantImagesBetweenProducts(
+  admin: AdminGraphql,
+  sourceProductGid: string,
+  targetProductGid: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const [src, tgt] = await Promise.all([
+    loadProductForVariantImages(admin, sourceProductGid),
+    loadProductForVariantImages(admin, targetProductGid),
+  ]);
+  if (!src) return { ok: false, message: "Source product not found." };
+  if (!tgt) return { ok: false, message: "Target product not found." };
+  if (src.variants.length !== tgt.variants.length) {
+    return {
+      ok: false,
+      message:
+        "Products must have the same number of variants. Match variant options or use products with identical variant counts.",
+    };
+  }
+  for (let i = 0; i < src.variants.length; i++) {
+    const gids = src.variants[i].fileGids;
+    const res = await saveVariantImagesMetafield(admin, tgt.variants[i].id, gids);
+    if (!res.ok) return res;
+  }
+  return { ok: true };
+}

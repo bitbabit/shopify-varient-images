@@ -28,3 +28,10 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+/// Product GIDs that currently have at least one variant with variant images (free-tier slot counting).
+model ShopUsage {
+  shop                   String   @id
+  configuredProductIds   String[] @default([])
+  updatedAt              DateTime @updatedAt
+}

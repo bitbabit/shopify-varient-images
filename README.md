@@ -2,6 +2,8 @@
 
 Shopify app that assigns **per-variant images** (stored on a variant metafield) and shows them on the **product page** via a **theme app extension** (hero image + horizontal thumbnail strip). Includes an **embedded admin** UI and an optional **admin link** from the product details page.
 
+**Public documentation (single page — implementation, pricing, PDP options):** [`docs/PUBLIC_GUIDE.md`](docs/PUBLIC_GUIDE.md)
+
 ---
 
 ## What gets stored
@@ -20,6 +22,8 @@ The app writes this metafield using the Admin API. On the storefront, Liquid rea
 ### App infrastructure (in your database)
 
 The embedded app uses **Prisma** to store **OAuth sessions** (shop, access tokens, etc.) in a **`Session`** table — not product images. Variant image assignments are **only** in metafields. Postgres is required so installs stay authenticated between requests. See **[Why PostgreSQL?](RENDER.md#why-postgresql-if-we-use-shopify-metafields)** in [`RENDER.md`](RENDER.md).
+
+**Free vs Pro:** Free tier limits (images per variant, number of products) are enforced in the Admin UI; **Pro** is a recurring subscription via Shopify Billing (`/app/billing`). Billing, privacy notes for your listing, and storefront behavior are summarized in [`docs/BILLING_AND_PRIVACY.md`](docs/BILLING_AND_PRIVACY.md).
 
 ---
 
@@ -73,9 +77,9 @@ npm run dev
 2. **Assign images in the app**  
    Open the app from **Apps**, choose a product, assign images per variant, and save.
 
-3. **Theme**  
+3. **Theme (PDP)**  
    **Online Store → Themes → Customize → Product template → Add block → Apps → Variant image gallery**  
-   If the gallery does not swap, set **Gallery container CSS selector** to match your theme’s product media wrapper (comma-separated selectors; first match wins).
+   The block is **self-contained** (no theme CSS selectors). Drag it to the main product column where you want the gallery. If you only want these images, hide or remove your theme’s default **product media** block in the same template. Variant changes use `variant:changed` and the variant picker (`name="id"`); deep links with `?variant=` are supported.
 
 4. **Deploy**  
    After you release a new version: `npm run deploy` (or `shopify app deploy`).
@@ -152,7 +156,7 @@ Images are **file references** on the variant metafield. Use `.value` to get the
 
 | Extension | Path | Purpose |
 |-----------|------|---------|
-| Theme | `extensions/varient-images/` | Block **Variant image gallery** — replaces theme gallery with hero + thumbnails when variants have images |
+| Theme | `extensions/varient-images/` | Block **Variant image gallery** — self-contained hero + thumbnails from metafields (no selector setup) |
 | Admin link | `extensions/variant-gallery-admin-link/` | Link on product details → opens app with product context |
 
 Theme extension handle (see `extensions/varient-images/shopify.extension.toml`): `variant-gallery`.
@@ -221,7 +225,7 @@ npm run deploy
 
 This publishes a new app version (embedded app + extensions). Merchants may need to accept updates or new scopes when prompted.
 
-**Host in production:** **[`RENDER.md`](RENDER.md)** — **Render (free tier) + Neon (free tier Postgres)**. Alternative: [`RAILWAY.md`](RAILWAY.md).
+**Host in production:** **[`RENDER.md`](RENDER.md)** — **Render + Neon Postgres**.
 
 ---
 
