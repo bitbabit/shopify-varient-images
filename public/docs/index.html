@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BitBabit: Variant Images — Documentation</title>
+    <meta
+      name="description"
+      content="Assign per-variant images in Shopify Admin, show them on the PDP with a theme block or custom Liquid. Free and Pro pricing, setup steps, and troubleshooting."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./docs.css" />
+    <link rel="icon" type="image/svg+xml" href="../logo.svg" />
+  </head>
+  <body>
+    <header class="doc-header">
+      <div class="doc-header__inner">
+        <div class="doc-header__gutter" aria-hidden="true"></div>
+        <div class="doc-header__main">
+          <div class="doc-header__row">
+            <div class="doc-header__start">
+              <a class="doc-header__brand" href="/">
+                <img
+                  class="doc-header__logo"
+                  src="../logo.svg"
+                  width="32"
+                  height="32"
+                  alt=""
+                />
+                <span class="doc-header__brand-text">
+                  <span class="doc-header__title">BitBabit: Variant Images</span>
+                  <span class="doc-header__badge">Docs</span>
+                </span>
+              </a>
+              <nav class="doc-header__nav" aria-label="Primary">
+                <a href="/">Home</a>
+                <a href="/docs/" aria-current="page">Documentation</a>
+                <a href="/#pricing">Pricing</a>
+                <a class="doc-header__nav-cta" href="/#login">Log in</a>
+              </nav>
+            </div>
+            <div class="doc-header__actions">
+              <button
+                type="button"
+                class="icon-btn doc-nav-toggle"
+                id="nav-toggle"
+                aria-label="Open table of contents"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <button type="button" class="icon-btn" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+                <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-shell">
+      <div class="doc-sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+      <aside class="doc-sidebar" id="doc-sidebar">
+        <p class="doc-sidebar__label">On this page</p>
+        <nav class="doc-nav" aria-label="Table of contents">
+          <a href="#overview" class="is-active">Overview</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#requirements">Requirements</a>
+          <a href="#workflow">Merchant workflow</a>
+          <a href="#storefront">Storefront (PDP)</a>
+          <a href="#liquid">Liquid reference</a>
+          <a href="#deploy">Deploy &amp; updates</a>
+          <a href="#privacy">Privacy &amp; data</a>
+          <a href="#troubleshooting">Troubleshooting</a>
+          <a href="#ecosystem">Stack &amp; integrations</a>
+        </nav>
+      </aside>
+
+      <main class="doc-main">
+        <div class="logo-row" aria-label="App branding">
+          <span>Built for the Shopify ecosystem</span>
+          <div class="logo-row__items">
+            <span class="app-logo-lockup" title="BitBabit: Variant Images">
+              <img src="../logo.svg" width="32" height="32" alt="" class="app-logo-img" />
+              <span class="app-logo-label">BitBabit app</span>
+            </span>
+            <a
+              href="https://www.shopify.com/partners"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="shopify-partner-link"
+            >
+              Shopify Partners
+            </a>
+            <span class="tech-badge" title="Shopify Liquid templating">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+              Liquid
+            </span>
+            <span class="tech-badge" title="GraphQL Admin API">Admin API</span>
+            <span class="tech-badge" title="Theme app extensions">App Bridge</span>
+            <span class="tech-badge" title="Sections everywhere">Online Store 2.0</span>
+            <span class="tech-badge" title="Sessions &amp; usage">PostgreSQL</span>
+          </div>
+        </div>
+
+        <section class="doc-hero" id="overview">
+          <h1>Documentation</h1>
+          <p class="doc-lead">
+            <strong style="color: var(--text)">BitBabit: Variant Images</strong> lets merchants assign
+            <strong style="color: var(--text)">multiple images per product variant</strong>, store them in Shopify
+            (<code style="font-size: 0.9em">custom.variant_images</code>), and display them on the product page with a
+            theme app block or custom theme code.
+          </p>
+        </section>
+
+        <section class="doc-section" id="pricing">
+          <h2>Pricing</h2>
+          <p>
+            Limits apply when saving in the <strong>embedded Admin app</strong>. The storefront reads metafields
+            directly from Shopify — see <a href="#privacy">Privacy &amp; data</a> for how billing relates to the theme.
+          </p>
+          <div class="pricing-grid">
+            <div class="price-card">
+              <div class="price-card__name">Free</div>
+              <div class="price-card__amount">$0 <small>/ month</small></div>
+              <ul>
+                <li>Up to <strong>6</strong> images per variant</li>
+                <li>Up to <strong>5</strong> products with variant images</li>
+                <li>Theme app block &amp; Liquid access</li>
+              </ul>
+            </div>
+            <div class="price-card price-card--featured">
+              <div class="price-card__name">Pro</div>
+              <div class="price-card__amount">$9.99 <small>/ month</small></div>
+              <ul>
+                <li><strong>Unlimited</strong> images per variant</li>
+                <li><strong>Unlimited</strong> products</li>
+                <li><strong>Copy to another product</strong> (same variant count)</li>
+                <li>7-day trial — confirm in app <strong>Pricing</strong> (subject to Partners listing)</li>
+              </ul>
+            </div>
+          </div>
+          <p>
+            <strong>Upgrade:</strong> In the app, open <strong>Pricing</strong> in the header and subscribe through
+            Shopify App Store billing. Custom/private apps may not support in-app billing — your developer can use
+            server configuration for Pro access where applicable.
+          </p>
+        </section>
+
+        <section class="doc-section" id="requirements">
+          <h2>Requirements</h2>
+          <ol>
+            <li>A <strong>Shopify store</strong> with products that have <strong>variants</strong>.</li>
+            <li>
+              <strong>Metafield definition</strong> (recommended before heavy use):
+              <ul>
+                <li><strong>Settings → Custom data → Variants</strong></li>
+                <li>Namespace <code>custom</code>, key <code>variant_images</code></li>
+                <li>Type: <strong>List of files</strong> (images)</li>
+                <li>Enable <strong>Storefront access</strong> so Liquid can read values on the Online Store.</li>
+              </ul>
+            </li>
+            <li>The <strong>app installed</strong> from the Shopify App Store or your install link.</li>
+          </ol>
+        </section>
+
+        <section class="doc-section" id="workflow">
+          <h2>Merchant workflow</h2>
+          <ol>
+            <li>Open <strong>Apps → BitBabit: Variant Images</strong> (or your listing name).</li>
+            <li><strong>Select a product</strong>, then assign images <strong>per variant</strong> (reorder, upload, or pick from Shopify Files).</li>
+            <li><strong>Save</strong> each variant as needed.</li>
+          </ol>
+          <p>Until images are saved, the storefront has nothing extra to show for that variant.</p>
+        </section>
+
+        <section class="doc-section" id="storefront">
+          <h2>Storefront (PDP)</h2>
+          <p>Two supported integration paths. Use <strong>tabs</strong> below to compare.</p>
+          <div class="tabs" data-tabs>
+            <div class="tabs__list" role="tablist">
+              <button type="button" class="tabs__btn" role="tab" aria-selected="true" aria-controls="panel-a" id="tab-a">
+                Option A — Theme app extension
+              </button>
+              <button type="button" class="tabs__btn" role="tab" aria-selected="false" aria-controls="panel-b" id="tab-b">
+                Option B — Custom theme
+              </button>
+            </div>
+            <div id="panel-a" class="tabs__panel is-visible" role="tabpanel" aria-labelledby="tab-a">
+              <p><strong>Recommended.</strong> No custom CSS selectors required: the block renders its own gallery (hero + thumbnails) where you place it.</p>
+              <ol>
+                <li><strong>Online Store → Themes → Customize</strong></li>
+                <li>Open the <strong>Product</strong> template</li>
+                <li><strong>Add block → Apps → Variant image gallery</strong></li>
+                <li>Place the block in the main product area (e.g. beside the buy box)</li>
+                <li>To avoid duplicate galleries, hide or remove the theme’s default <strong>product media</strong> block if you only want these images</li>
+              </ol>
+              <p>
+                Behavior uses common variant events (<code>variant:changed</code>, picker <code>name="id"</code>) and
+                <code>?variant=</code> links when applicable. You can customize the empty state message in block settings.
+              </p>
+            </div>
+            <div id="panel-b" class="tabs__panel" role="tabpanel" aria-labelledby="tab-b">
+              <p>
+                For fully custom themes, integrate with a <strong>snippet</strong> that coordinates native media and
+                metafield-driven UI (e.g. <code>window.eventBus</code>, section IDs, <code>[data-product-media-wrapper]</code>).
+              </p>
+              <p>
+                See the repository companion:
+                <code>docs/examples/variant-images-metafield-theme-integration.md</code> for a full step-by-step reference
+                (events, shell pattern, quick view).
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="doc-section" id="liquid">
+          <h2>Liquid quick reference</h2>
+          <p>Read images for the <strong>selected</strong> variant on the PDP:</p>
+          <div class="code-block-wrap">
+            <pre>{% assign variant_images = product.selected_or_first_available_variant.metafields.custom.variant_images.value %}
+{% if variant_images and variant_images.size > 0 %}
+  {% for image in variant_images %}
+    &lt;img src="{{ image | image_url: width: 1200 }}" alt="{{ image.alt | default: product.title | escape }}" loading="lazy"&gt;
+  {% endfor %}
+{% endif %}</pre>
+          </div>
+          <p>Use <code>variant.metafields.custom.variant_images</code> inside <code>{% for variant in product.variants %}</code> when building JSON for JavaScript.</p>
+        </section>
+
+        <section class="doc-section" id="deploy">
+          <h2>Deploy &amp; updates</h2>
+          <ul>
+            <li>After a new release: run <code>shopify app deploy</code> (or your CI pipeline).</li>
+            <li>Merchants may need to <strong>accept</strong> updated permissions or app versions when prompted.</li>
+          </ul>
+        </section>
+
+        <section class="doc-section" id="privacy">
+          <h2>Privacy, billing &amp; data</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Where it lives</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Variant image file references</td>
+                  <td>Shopify variant metafield <code>custom.variant_images</code></td>
+                </tr>
+                <tr>
+                  <td>OAuth sessions</td>
+                  <td>Your app database (e.g. Prisma <code>Session</code>)</td>
+                </tr>
+                <tr>
+                  <td>Free-tier product counts</td>
+                  <td>Your app database (usage tracking)</td>
+                </tr>
+                <tr>
+                  <td>Subscription state</td>
+                  <td>Shopify Billing API (when applicable)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The <strong>Online Store</strong> reads metafields in Liquid; it does not call your app server on each page view.
+            After uninstall, sessions are removed from your DB; <strong>variant metafields are not automatically deleted</strong>
+            (merchants keep catalog data in Shopify).
+          </p>
+          <p>
+            For App Store privacy policy inputs and compliance webhooks, maintain internal docs aligned with
+            <strong>Billing API</strong> and <strong>ShopUsage</strong> storage as described in your legal pages.
+          </p>
+        </section>
+
+        <section class="doc-section" id="troubleshooting">
+          <h2>Troubleshooting</h2>
+          <div class="accordion">
+            <div class="accordion__item is-open">
+              <button type="button" class="accordion__trigger" aria-expanded="true">
+                Nothing appears on the PDP
+              </button>
+              <div class="accordion__panel">
+                Check metafield <strong>Storefront</strong> access, that the variant has <strong>saved</strong> images in the app, and that the theme block is added or your snippet is integrated.
+              </div>
+            </div>
+            <div class="accordion__item">
+              <button type="button" class="accordion__trigger" aria-expanded="false">
+                Wrong images after variant change
+              </button>
+              <div class="accordion__panel">
+                Confirm assignments in the app for that <strong>variant</strong>; hard-refresh the product page. Option A works on most OS 2.0 themes; custom themes may need Option B patterns.
+              </div>
+            </div>
+            <div class="accordion__item">
+              <button type="button" class="accordion__trigger" aria-expanded="false">
+                “No extra images” or empty state
+              </button>
+              <div class="accordion__panel">
+                That variant has no files in the metafield — assign images in the app and save.
+              </div>
+            </div>
+            <div class="accordion__item">
+              <button type="button" class="accordion__trigger" aria-expanded="false">
+                Hitting Free limits
+              </button>
+              <div class="accordion__panel">
+                Upgrade under <strong>Pricing</strong> in the app for Pro, or reduce the number of images per variant / products using variant images on Free.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="doc-section" id="ecosystem">
+          <h2>Stack &amp; document map</h2>
+          <p>Typical hosting uses <strong>Node.js</strong>, <strong>PostgreSQL</strong> (sessions &amp; usage), and Shopify’s <strong>Admin GraphQL</strong> for products, files, and metafields.</p>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Audience</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>docs/PUBLIC_GUIDE.md</code></td>
+                  <td>Merchants &amp; implementers — source for this page</td>
+                </tr>
+                <tr>
+                  <td><code>docs/examples/variant-images-metafield-theme-integration.md</code></td>
+                  <td>Theme developers — deep PDP integration</td>
+                </tr>
+                <tr>
+                  <td><code>docs/BILLING_AND_PRIVACY.md</code></td>
+                  <td>Privacy &amp; billing behavior</td>
+                </tr>
+                <tr>
+                  <td><code>RENDER.md</code></td>
+                  <td>Self-hosting (e.g. Render + Neon)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="doc-footer">
+          <p>
+            © BitBabit. “Shopify” and related marks are trademarks of Shopify Inc. This page is informational; pricing and
+            features may match your <strong>Shopify Partners</strong> listing.
+          </p>
+          <p style="margin-top: 0.75rem">
+            Static docs: <code>/docs/index.html</code> on your app host (e.g. <code>https://your-app.onrender.com/docs/</code>).
+          </p>
+        </footer>
+      </main>
+    </div>
+
+    <script src="./docs.js" defer></script>
+  </body>
+</html>

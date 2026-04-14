@@ -5,13 +5,14 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import {
+  Link,
   useFetcher,
   useLoaderData,
   useRevalidator,
   useSearchParams,
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { authenticate } from "../shopify.server";
+import { authenticate, PRO_PLAN } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ShopifyFilesPanel } from "../components/ShopifyFilesPanel";
 import { VariantImageAssignment } from "../components/VariantImageAssignment";
@@ -27,7 +28,6 @@ import {
   type ProductPayload,
   type ShopifyFileRow,
 } from "../lib/variant-images.server";
-import { PRO_PLAN } from "../shopify.server";
 import { billingIsTest } from "../lib/billing-env.server";
 import { resolveIsPro } from "../lib/billing-entitlement.server";
 import {
@@ -42,6 +42,7 @@ import {
 
 type LoaderData = {
   shop: string;
+  docsUrl: string;
   product: ProductPayload | null;
   productId: string | null;
   error?: string | null;
@@ -60,6 +61,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isPro = resolveIsPro(session.shop, hasActivePayment);
   const configuredProductIds = await getShopUsage(session.shop);
   const url = new URL(request.url);
+  const docsUrl = new URL("/docs/", url.origin).href;
   // Admin links often pass numeric `id`; GraphQL needs a Product GID.
   const rawProductId =
     url.searchParams.get("productId") ?? url.searchParams.get("id");
@@ -69,6 +71,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!productId) {
     return {
       shop: session.shop,
+      docsUrl,
       product: null,
       productId: null,
       error: null,
@@ -85,6 +88,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
     return {
       shop: session.shop,
+      docsUrl,
       product,
       productId,
       error: product ? null : "Product not found.",
@@ -97,6 +101,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const message = e instanceof Error ? e.message : "Failed to load product.";
     return {
       shop: session.shop,
+      docsUrl,
       product: null,
       productId,
       error: message,
@@ -160,13 +165,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return { ok: false as const, message: "Choose an image file to upload." };
     }
     if (!isPro && productGid && forVariant) {
+      let clientGids: string[] = [];
+      try {
+        const raw = String(formData.get("currentVariantFileGids") ?? "[]");
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          clientGids = parsed.filter((x): x is string => typeof x === "string");
+        }
+      } catch {
+        clientGids = [];
+      }
       const pid = normalizeShopifyProductGid(productGid);
       const loaded = await loadProductForVariantImages(graphql, pid);
       const v = loaded?.variants.find((x) => x.id === forVariant);
-      if (v && v.fileGids.length >= FREE_MAX_IMAGES_PER_VARIANT) {
+      const savedCount = v?.fileGids.length ?? 0;
+      // UI can have more images than the last-saved metafield; use the higher count so limits match Save.
+      const effectiveCount = Math.max(savedCount, clientGids.length);
+      if (effectiveCount >= FREE_MAX_IMAGES_PER_VARIANT) {
         return {
           ok: false as const,
-          message: `Free plan allows up to ${FREE_MAX_IMAGES_PER_VARIANT} images per variant. Upgrade to Pro for unlimited.`,
+          message: `Free plan allows up to ${FREE_MAX_IMAGES_PER_VARIANT} images per variant (including images you added but have not saved yet). Upgrade to Pro for unlimited.`,
         };
       }
     }
@@ -227,7 +245,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return {
         ok: false as const,
         message:
-          "Copying variant images to another product is a Pro feature. Upgrade from Plan & billing.",
+          "Copying variant images to another product is a Pro feature. Upgrade from Pricing.",
       };
     }
     const sourceRaw = String(formData.get("sourceProductId") ?? "");
@@ -249,6 +267,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function VariantImagesPage() {
   const {
     shop,
+    docsUrl,
     product,
     productId,
     error: loadError,
@@ -277,6 +296,10 @@ export default function VariantImagesPage() {
   const [pendingSaveVariantId, setPendingSaveVariantId] = useState<string | null>(
     null,
   );
+  /** Which variant row started the current file upload (for per-row loading UI). */
+  const [uploadingVariantId, setUploadingVariantId] = useState<string | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingVariantRef = useRef<string | null>(null);
 
@@ -296,6 +319,8 @@ export default function VariantImagesPage() {
 
   useEffect(() => {
     setPreviewExtras({});
+    // Only reset when navigating to another product, not on every product object refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [product?.id]);
 
   useEffect(() => {
@@ -308,6 +333,7 @@ export default function VariantImagesPage() {
       next[v.id] = [...v.fileGids];
     }
     setVariantFiles(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync local state to loaded product by id
   }, [product?.id]);
 
   const requestPreviews = useCallback(
@@ -340,6 +366,7 @@ export default function VariantImagesPage() {
   useEffect(() => {
     const d = uploadFetcher.data;
     if (!d || uploadFetcher.state !== "idle") return;
+    setUploadingVariantId(null);
     if (d.ok && "id" in d && d.id && "forVariant" in d && d.forVariant) {
       const vid = d.forVariant;
       setVariantFiles((prev) => ({
@@ -534,14 +561,19 @@ export default function VariantImagesPage() {
       const variantId = pendingVariantRef.current;
       e.target.value = "";
       if (!file || !variantId) return;
+      setUploadingVariantId(variantId);
       const fd = new FormData();
       fd.set("intent", "upload");
       fd.set("file", file);
       fd.set("forVariant", variantId);
+      fd.set(
+        "currentVariantFileGids",
+        JSON.stringify(variantFiles[variantId] ?? []),
+      );
       if (product?.id) fd.set("productId", product.id);
       uploadFetcher.submit(fd, { method: "post", encType: "multipart/form-data" });
     },
-    [uploadFetcher, product?.id],
+    [uploadFetcher, product?.id, variantFiles],
   );
 
   const saving =
@@ -557,7 +589,7 @@ export default function VariantImagesPage() {
     duplicateFetcher.state === "loading";
 
   return (
-    <s-page heading="Variant images">
+    <s-page heading="Home">
       <input
         ref={fileInputRef}
         type="file"
@@ -566,13 +598,99 @@ export default function VariantImagesPage() {
         onChange={onHiddenFileChange}
       />
 
+      {!productId ? (
+        <s-section heading="Welcome">
+          <s-paragraph>
+            Map <strong>unique image sets to each product variant</strong>, store them in the variant
+            metafield <s-text type="strong">custom.variant_images</s-text>, and show them on your product
+            page with the theme app block or custom Liquid.
+          </s-paragraph>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 12,
+              marginTop: 12,
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid #e1e3e5",
+                borderRadius: 10,
+                padding: 14,
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>1. Select a product</div>
+              <div style={{ fontSize: 12, color: "#6d7175", lineHeight: 1.5 }}>
+                Choose any product with variants, then assign and reorder images per variant.
+              </div>
+            </div>
+            <div
+              style={{
+                border: "1px solid #e1e3e5",
+                borderRadius: 10,
+                padding: 14,
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>2. Save &amp; theme</div>
+              <div style={{ fontSize: 12, color: "#6d7175", lineHeight: 1.5 }}>
+                Save each variant, then add the <strong>Variant image gallery</strong> block in the theme editor.
+              </div>
+            </div>
+            <div
+              style={{
+                border: "1px solid #e1e3e5",
+                borderRadius: 10,
+                padding: 14,
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>3. Go further</div>
+              <div style={{ fontSize: 12, color: "#6d7175", lineHeight: 1.5 }}>
+                Compare <Link to="/app/pricing">Free vs Pro</Link>
+                {" · "}
+                <a href={docsUrl} target="_blank" rel="noopener noreferrer">
+                  Full documentation
+                </a>
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <s-button variant="primary" onClick={pickProduct}>
+              Select product to configure
+            </s-button>
+            <Link to="/app/pricing" style={{ fontSize: 13, fontWeight: 500 }}>
+              View pricing
+            </Link>
+            <a
+              href={docsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 13, fontWeight: 500 }}
+            >
+              Documentation
+            </a>
+          </div>
+        </s-section>
+      ) : null}
+
       {!isPro ? (
         <s-banner tone="info" heading="Free plan limits">
           <s-paragraph>
             Up to {freeMaxImagesPerVariant} images per variant and{" "}
             {freeMaxProducts} products with variant images ({configuredProductCount} /{" "}
             {freeMaxProducts} products in use).{" "}
-            <s-link href="/app/billing">Upgrade to Pro</s-link> for unlimited images,
+            <Link to="/app/pricing">Upgrade to Pro</Link> for unlimited images,
             unlimited products, and copy-to-product.
           </s-paragraph>
         </s-banner>
@@ -671,7 +789,7 @@ export default function VariantImagesPage() {
             </s-button>
           ) : (
             <s-paragraph>
-              <s-link href="/app/billing">Subscribe to Pro</s-link> to enable this.
+              <Link to="/app/pricing">Subscribe to Pro</Link> to enable this.
             </s-paragraph>
           )}
         </s-section>
@@ -716,7 +834,7 @@ export default function VariantImagesPage() {
                     orderedGids={gids}
                     previewByGid={previewLookup}
                     productImages={product.productImages}
-                    uploading={uploading}
+                    uploading={uploading && uploadingVariantId === v.id}
                     browsingFiles={filesLoading && fileBrowseVariantId === v.id}
                     saving={savingThis}
                     onReorder={(next) => reorderVariant(v.id, next)}

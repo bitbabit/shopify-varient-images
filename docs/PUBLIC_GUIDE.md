@@ -2,6 +2,8 @@
 
 **One page for merchants and developers:** what the app does, **pricing**, how to implement variant images on the **storefront PDP**, and where to find advanced examples.
 
+**Styled documentation site (same content, interactive):** on your deployed app, open **`/docs/`** (static files in `public/docs/`), or open `public/docs/index.html` in a browser from the repo.
+
 ---
 
 ## 1. What this app does
@@ -21,9 +23,9 @@ Data lives in **Shopify** (metafields + files). The app uses your database only 
 | **Images per variant** | Up to **6** | **Unlimited** |
 | **Products with variant images** | Up to **5** products | **Unlimited** |
 | **Copy to another product** | No | **Yes** (duplicate mappings to another product with the same variant count) |
-| **Price** | — | **USD $9.99 / month** (7-day trial; confirm in the app **Plan** page — subject to change in Partners) |
+| **Price** | — | **USD $9.99 / month** (7-day trial; confirm on the app **Pricing** page — subject to change in Partners) |
 
-**Where to upgrade:** In the embedded app, open **Plan** (navigation) and subscribe through **Shopify** (standard App Store billing).
+**Where to upgrade:** In the embedded app, open **Pricing** in the header (or `/app/pricing`) and subscribe through **Shopify** (standard App Store billing).
 
 **Storefront:** The theme reads **metafields in Liquid**. Pro vs Free controls **saving in Admin**; existing metafield data on the storefront follows Shopify’s normal behavior (see [Billing & privacy](BILLING_AND_PRIVACY.md)).
 
@@ -120,7 +122,7 @@ Use `variant.metafields.custom.variant_images` inside `{% for variant in product
 | Wrong images | Confirm assignments in the app for that **variant**; hard-refresh PDP. |
 | Variant change doesn’t update | Theme may use non-standard events; Option A works on most Online Store 2.0 themes. For custom themes, see **Option B** example doc. |
 | “No extra images” message | That variant has no metafield files — assign in the app. |
-| Free limits | Upgrade under **Plan** in the app. |
+| Free limits | Upgrade under **Pricing** in the app. |
 
 ---
 

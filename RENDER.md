@@ -103,7 +103,7 @@ Use Neon’s connection string in `.env` as `DATABASE_URL`, **or** local Docker 
 
 ```bash
 docker compose up -d
-# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/variantimg
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5433/variantimg
 npx prisma migrate dev
 npm run dev
 ```

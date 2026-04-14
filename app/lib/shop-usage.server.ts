@@ -51,7 +51,7 @@ export async function syncShopUsageAfterSave(args: {
   const existing = await prisma.shopUsage.findUnique({
     where: { shop: args.shop },
   });
-  let next = new Set(existing?.configuredProductIds ?? []);
+  const next = new Set(existing?.configuredProductIds ?? []);
   if (hasAny) {
     next.add(args.productGid);
   } else {

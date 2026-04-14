@@ -4,6 +4,8 @@ Shopify app that assigns **per-variant images** (stored on a variant metafield) 
 
 **Public documentation (single page — implementation, pricing, PDP options):** [`docs/PUBLIC_GUIDE.md`](docs/PUBLIC_GUIDE.md)
 
+**Interactive docs site (HTML — pricing, steps, Liquid, troubleshooting):** after deploy, open **`/docs/`** on your app host (e.g. `https://your-service.onrender.com/docs/`) or open [`public/docs/index.html`](public/docs/index.html) locally in a browser.
+
 ---
 
 ## What gets stored
@@ -23,7 +25,7 @@ The app writes this metafield using the Admin API. On the storefront, Liquid rea
 
 The embedded app uses **Prisma** to store **OAuth sessions** (shop, access tokens, etc.) in a **`Session`** table — not product images. Variant image assignments are **only** in metafields. Postgres is required so installs stay authenticated between requests. See **[Why PostgreSQL?](RENDER.md#why-postgresql-if-we-use-shopify-metafields)** in [`RENDER.md`](RENDER.md).
 
-**Free vs Pro:** Free tier limits (images per variant, number of products) are enforced in the Admin UI; **Pro** is a recurring subscription via Shopify Billing (`/app/billing`). Billing, privacy notes for your listing, and storefront behavior are summarized in [`docs/BILLING_AND_PRIVACY.md`](docs/BILLING_AND_PRIVACY.md).
+**Free vs Pro:** Free tier limits (images per variant, number of products) are enforced in the Admin UI; **Pro** is a recurring subscription via Shopify Billing (embedded **Pricing** page at `/app/pricing`). Billing, privacy notes for your listing, and storefront behavior are summarized in [`docs/BILLING_AND_PRIVACY.md`](docs/BILLING_AND_PRIVACY.md).
 
 ---
 

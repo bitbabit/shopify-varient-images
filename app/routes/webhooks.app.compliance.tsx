@@ -25,6 +25,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ? (payload as { shop_domain: string }).shop_domain
           : shop;
       await db.session.deleteMany({ where: { shop: domain } });
+      await db.shopUsage.deleteMany({ where: { shop: domain } });
       break;
     }
     default:
