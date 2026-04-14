@@ -21,9 +21,15 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>BitBabit: Variant Images</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Assign different images to each product variant and show them on the
+          storefront with a theme block — no generic placeholder gallery.
+        </p>
+        <p className={styles.text} style={{ fontSize: "1rem", paddingBottom: "1rem" }}>
+          <strong>Merchants:</strong> open the app from{" "}
+          <strong>Shopify Admin → Apps</strong>. This page is only for signing in
+          with your shop domain if you were given a direct link.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -39,16 +45,18 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Variant image lists</strong>. Map Shopify Files or product
+            images to each variant; order matters for the primary storefront image.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Metafield storage</strong>. Values live in{" "}
+            <code>custom.variant_images</code> on each variant for Liquid and the
+            app extension.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Theme integration</strong>. Add the Variant image gallery app
+            block in the theme editor, or use your own snippet that reads the same
+            metafield.
           </li>
         </ul>
       </div>
